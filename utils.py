@@ -39,6 +39,11 @@ class NoisyLinear(nn.Module):
         self.bias_mu = nn.Parameter(torch.Tensor(out_features))
         self.bias_sigma = nn.Parameter(torch.Tensor(out_features))
 
+        self.register_buffer(
+            "weight_epsilon", torch.Tensor(out_features, in_features)
+        )
+        self.register_buffer("bias_epsilon", torch.Tensor(out_features))
+
         self.reset_parameters()
         self.reset_noise()
 
@@ -86,13 +91,18 @@ class Network(nn.Module):
         out_dim (int): output size
         atom_size (int): atom size, used to compute categorical distribution
         support (torch.Tensor): discrete support z
+        hidden_size (int): hidden size
     """
     def __init__(
             self,
             in_dim: int,
             out_dim: int,
             atom_size: int,
-            support: torch.Tensor
+            support: torch.Tensor,
+            hidden_size: int,
+            # options
+            no_dueling=False,
+            no_noise=False
     ):
         """Initialization."""
         super(Network, self).__init__()
@@ -100,29 +110,39 @@ class Network(nn.Module):
         self.support = support
         self.out_dim = out_dim
         self.atom_size = atom_size
+        self.hidden_size = hidden_size
 
         # set common feature layer
         self.feature_layer = nn.Sequential(
-            nn.Linear(in_dim, 128),
+            nn.Linear(in_dim, self.hidden_size,),
             nn.ReLU(),
         )
 
         # set advantage layer
-        self.advantage_hidden_layer = NoisyLinear(128, 128)
-        self.advantage_layer = NoisyLinear(128, out_dim * atom_size)  # output one distribution per action
-
+        self.advantage_hidden_layer = NoisyLinear(self.hidden_size, self.hidden_size)
+        self.advantage_layer = NoisyLinear(self.hidden_size, out_dim * atom_size)  # output one distribution per action
         # set value layer
-        self.value_hidden_layer = NoisyLinear(128, 128)
-        self.value_layer = NoisyLinear(128, atom_size)
+        self.value_hidden_layer = NoisyLinear(self.hidden_size, self.hidden_size)
+        self.value_layer = NoisyLinear(self.hidden_size, atom_size)
+
+        # options
+        self.no_dueling = no_dueling
+        self.no_noise = no_noise
+        if no_noise:
+            # use linear standard layers
+            self.advantage_hidden_layer = nn.Linear(self.hidden_size, self.hidden_size)
+            self.advantage_layer = nn.Linear(self.hidden_size, out_dim * atom_size)
+            self.value_hidden_layer = nn.Linear(self.hidden_size, self.hidden_size)
+            self.value_layer = nn.Linear(self.hidden_size, atom_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward method implementation."""
+        """Forward method implementation, return one Q-value for each action."""
         dist = self.dist(x)
         q = torch.sum(dist * self.support, dim=2)
         return q
 
     def dist(self, x: torch.Tensor) -> torch.Tensor:
-        """Get distribution for atoms."""
+        """Get distribution for atoms, one distribution for each action."""
         feature = self.feature_layer(x)
         adv_hid = F.relu(self.advantage_hidden_layer(feature))
         val_hid = F.relu(self.value_hidden_layer(feature))
@@ -130,8 +150,12 @@ class Network(nn.Module):
         advantage = self.advantage_layer(adv_hid).view(
             -1, self.out_dim, self.atom_size
         )
-        value = self.value_layer(val_hid).view(-1, 1, self.atom_size)
-        q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
+        if not self.no_dueling:
+            value = self.value_layer(val_hid).view(-1, 1, self.atom_size)
+            q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
+        else:
+            # disable dueling network, ignore value layer and advantage formula
+            q_atoms = advantage
 
         dist = F.softmax(q_atoms, dim=-1)
         dist = dist.clamp(min=1e-3)  # for avoiding nans
