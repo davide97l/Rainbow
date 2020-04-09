@@ -86,7 +86,7 @@ if __name__ == '__main__':
         print("Training agent", labels[i])
         score, loss = agent.train(num_frames)
         scores.append(score)
-        losses.append(losses)
+        losses.append(loss)
 
     # create a color palette
     palette = plt.get_cmap('Set1')
