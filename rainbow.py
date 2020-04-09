@@ -265,8 +265,15 @@ class DQNAgent:
 
             # plotting
             if self.plot and frame_idx % self.plotting_interval == 0:
-                frame_scores.append(float(np.mean(scores[-self.plotting_interval:])))
+                if len(scores) == 0:
+                    if len(frame_scores) > 0:
+                        frame_scores.append(float(frame_scores[-1]))
+                    else:
+                        frame_scores.append(0.)
+                else:
+                    frame_scores.append(float(np.mean(scores)))
                 self._plot(frame_idx, frame_scores, losses)
+                scores = []
 
         self.env.close()
 
@@ -367,7 +374,7 @@ class DQNAgent:
         plt.figure(figsize=(20, 5))
         plt.subplot(131)
         plt.title('Frame %s. Mean Score: %.4s' % (frame_idx,
-                                                  np.mean(scores[-self.plotting_interval:])))
+                                                  np.mean(scores[-3:])))
         plt.plot(scores)
         plt.xlabel("Frames x " + str(self.plotting_interval))
         plt.ylabel("Score")
