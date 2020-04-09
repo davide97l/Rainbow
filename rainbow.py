@@ -34,6 +34,7 @@ class DQNAgent:
         hidden_size (int): size of the layers of the top dense network
         lr (float): learning rate
         plot (bool): if True, plot training charts
+        plotting_interval (int): steps per plotting refresh
         alpha (float): determines how much prioritization is used
         beta (float): determines how much importance sampling is used
         prior_eps (float): guarantees every transition can be sampled
@@ -50,7 +51,7 @@ class DQNAgent:
             target_update: int = 100,
             gamma: float = 0.99,
             lr: float =0.001,
-            hiddden_size = 128,
+            hidden_size=128,
             # PER parameters
             alpha: float = 0.2,
             beta: float = 0.6,
@@ -63,6 +64,7 @@ class DQNAgent:
             n_step: int = 3,
             # Plotting
             plot: bool = True,
+            plotting_interval: int = 100,
             # Options
             no_dueling: bool = False,
             no_double: bool = False,
@@ -82,7 +84,7 @@ class DQNAgent:
         self.batch_size = batch_size
         self.target_update = target_update
         self.gamma = gamma
-        self.hidden_size = hiddden_size
+        self.hidden_size = hidden_size
 
         # device: cpu / gpu
         self.device = torch.device(
@@ -127,6 +129,7 @@ class DQNAgent:
 
         # plot
         self.plot = plot
+        self.plotting_interval = plotting_interval
 
         # epsilon
         self.max_epsilon = max_epsilon
@@ -215,7 +218,7 @@ class DQNAgent:
 
         return loss.item()
 
-    def train(self, num_frames: int, plotting_interval: int = 200) -> (List[int], List[int]):
+    def train(self, num_frames: int) -> (List[int], List[int]):
         """Train the agent."""
         self.is_test = False
 
@@ -223,6 +226,7 @@ class DQNAgent:
         update_cnt = 0
         losses = []
         scores = []
+        frame_scores = []
         score = 0
 
         for frame_idx in range(1, num_frames + 1):
@@ -238,8 +242,8 @@ class DQNAgent:
 
             # if episode ends
             if done:
-                state = self.env.reset()
                 scores.append(score)
+                state = self.env.reset()
                 score = 0
 
             # linearly decrease epsilon
@@ -255,18 +259,18 @@ class DQNAgent:
                 loss = self.update_model()
                 losses.append(loss)
                 update_cnt += 1
-
                 # if hard update is needed
                 if update_cnt % self.target_update == 0 and not self.no_double:
                     self._target_hard_update()
 
             # plotting
-            if frame_idx % plotting_interval == 0:
-                self._plot(frame_idx, scores, losses)
+            if self.plot and frame_idx % self.plotting_interval == 0:
+                frame_scores.append(float(np.mean(scores[-self.plotting_interval:])))
+                self._plot(frame_idx, frame_scores, losses)
 
         self.env.close()
 
-        return scores, losses
+        return frame_scores, losses
 
     def test(self) -> int:
         """Test the agent on one episode."""
@@ -362,9 +366,10 @@ class DQNAgent:
         clear_output(True)
         plt.figure(figsize=(20, 5))
         plt.subplot(131)
-        plt.title('Frame %s. Mean Score: %.4s' % (frame_idx, np.mean(scores[-self.target_update:])))
+        plt.title('Frame %s. Mean Score: %.4s' % (frame_idx,
+                                                  np.mean(scores[-self.plotting_interval:])))
         plt.plot(scores)
-        plt.xlabel("Episodes")
+        plt.xlabel("Frames x " + str(self.plotting_interval))
         plt.ylabel("Score")
         plt.subplot(132)
         plt.title('Loss')

@@ -107,7 +107,7 @@ class SumSegmentTree(SegmentTree):
         probability efficiently.
         Parameters
         ----------
-        perfixsum: float
+        prefixsum: float
             upperbound on the sum of array prefix
         Returns
         -------
