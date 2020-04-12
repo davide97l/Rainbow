@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from typing import Deque, Dict, List, Tuple
-from replay_buffer import *
+from replay_buffer2 import *
 from utils import *
 from IPython.display import clear_output
 from torch.nn.utils import clip_grad_norm_
@@ -77,7 +77,13 @@ class DQNAgent:
             min_epsilon: float = 0.1,
             epsilon_decay: float = 0.0005
     ):
-        obs_dim = env.observation_space.shape[0]  # TODO 2 dimensional observations
+        assert len(env.observation_space.shape) == 3 or len(env.observation_space.shape) == 1
+        if len(env.observation_space.shape) == 1:
+            obs_dim = [env.observation_space.shape[0]]
+        else:
+            # TODO convert to grayscale
+            # remember: gym has dimension (w, h, c) but pytorch has (c, h, w)
+            obs_dim = [env.observation_space.shape[0], env.observation_space.shape[1], env.observation_space.shape[2]]
         action_dim = env.action_space.n
 
         self.env = env
@@ -109,12 +115,22 @@ class DQNAgent:
         ).to(self.device)
 
         # networks: dqn, dqn_target
-        self.dqn = Network(
-            obs_dim, action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
-        ).to(self.device)
-        self.dqn_target = Network(
-            obs_dim, action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
-        ).to(self.device)
+        if len(obs_dim == 1):
+            # if input is 1d array use convolutional layers
+            self.dqn = DenseNet(
+                obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
+            ).to(self.device)
+            self.dqn_target = DenseNet(
+                obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
+            ).to(self.device)
+        else:
+            # if input is 3d frame use convolutional layers
+            self.dqn = ConvNet(
+                obs_dim, action_dim, self.atom_size, self.support, no_dueling, no_noise
+            ).to(self.device)
+            self.dqn_target = ConvNet(
+                obs_dim, action_dim, self.atom_size, self.support, no_dueling, no_noise
+            ).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
 
@@ -167,7 +183,7 @@ class DQNAgent:
         else:
             # Select best action: no epsilon greedy action selection but NoisyNet
             selected_action = self.dqn(
-                torch.FloatTensor(state).to(self.device)
+                torch.FloatTensor(state).unsqueeze(0).to(self.device)
             ).argmax()
             selected_action = selected_action.detach().cpu().numpy()
 

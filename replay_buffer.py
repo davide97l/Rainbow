@@ -9,7 +9,7 @@ class ReplayBuffer:
     """A simple numpy replay buffer.
     Parameters
     ---------
-    obs_dim: int
+    obs_dim: list[int]
         Observation shape
     size: int
         # maximum number of elements in buffer
@@ -23,14 +23,14 @@ class ReplayBuffer:
 
     def __init__(
             self,
-            obs_dim: int,
+            obs_dim: List[int],
             size: int = 1024,
             batch_size: int = 32,
             n_step: int = 1,
             gamma: float = 0.99
     ):
-        self.obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
-        self.next_obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
+        self.obs_buf = np.zeros([size, *obs_dim], dtype=np.float32)
+        self.next_obs_buf = np.zeros([size, *obs_dim], dtype=np.float32)
         self.acts_buf = np.zeros([size], dtype=np.float32)
         self.rews_buf = np.zeros([size], dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
@@ -45,11 +45,11 @@ class ReplayBuffer:
     def store(
             self,
             obs: np.ndarray,
-            act: np.ndarray,
+            act: int,
             rew: float,
             next_obs: np.ndarray,
             done: bool,
-    ) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]:
+    ) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool] or None:
         """Store a new experience in the buffer"""
         transition = (obs, act, rew, next_obs, done)
         self.n_step_buffer.append(transition)
@@ -90,9 +90,8 @@ class ReplayBuffer:
             indices=idxs,  # # need this for priority updating
         )
 
-    def sample_batch_from_idxs(
-        self, idxs: np.ndarray
-    ) -> Dict[str, np.ndarray]:
+    def sample_batch_from_idxs(self, idxs: np.ndarray) -> Dict[str, np.ndarray]:
+        """Sample a batch given some fixed idxs"""
         # for N-step Learning
         return dict(
             obs=self.obs_buf[idxs],
@@ -145,7 +144,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     def __init__(
             self,
-            obs_dim: int,
+            obs_dim: List[int],
             size: int = 1024,
             batch_size: int = 32,
             alpha: float = 0.6,
@@ -177,7 +176,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             rew: float,
             next_obs: np.ndarray,
             done: bool,
-    ) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]:
+    ) -> Tuple[np.ndarray, int, float, np.ndarray, bool]:
         """Store an experience and its priority."""
         transition = super().store(obs, act, rew, next_obs, done)
 
@@ -237,8 +236,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         for i in range(self.batch_size):
             a = segment * i
             b = segment * (i + 1)
-            upperbound = random.uniform(a, b)
-            idx = self.sum_tree.find_prefixsum_idx(upperbound)
+            upper_bound = random.uniform(a, b)
+            idx = self.sum_tree.find_prefixsum_idx(upper_bound)
             indices.append(idx)
 
         return indices
@@ -255,3 +254,24 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weight = weight / max_weight
 
         return weight
+
+
+if __name__ == '__main__':
+    dims = [12]
+    s1 = np.random.uniform(size=dims)  # state
+    s2 = np.random.uniform(size=dims)  # next state
+    a = 1  # action 1
+    r = 100  # reward 100
+    d = False  # done False
+    b = PrioritizedReplayBuffer(dims, batch_size=3)
+    # store our fake sample 6 times
+    b.store(s1, a, r, s2, d)
+    b.store(s1, a, r, s2, d)
+    b.store(s1, a, r, s2, d)
+    b.store(s1, a, r, s2, d)
+    b.store(s1, a, r, s2, d)
+    b.store(s1, a, r, s2, d)
+    # sample 3 random samples
+    m = b.sample_batch()
+    assert m["obs"][0].shape == s1.shape
+    print(m)
