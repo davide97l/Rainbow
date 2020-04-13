@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from typing import Deque, Dict, List, Tuple
-from replay_buffer2 import *
+from replay_buffer import *
 from utils import *
 from IPython.display import clear_output
 from torch.nn.utils import clip_grad_norm_
