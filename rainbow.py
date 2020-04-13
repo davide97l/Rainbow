@@ -79,8 +79,10 @@ class DQNAgent:
     ):
         assert len(env.observation_space.shape) == 3 or len(env.observation_space.shape) == 1
         if len(env.observation_space.shape) == 1:
+            print("Using DenseNet")
             obs_dim = [env.observation_space.shape[0]]
         else:
+            print("Using ConvNet")
             # TODO convert to grayscale
             # remember: gym has dimension (w, h, c) but pytorch has (c, h, w)
             obs_dim = [env.observation_space.shape[0], env.observation_space.shape[1], env.observation_space.shape[2]]
