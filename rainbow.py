@@ -115,7 +115,7 @@ class DQNAgent:
         ).to(self.device)
 
         # networks: dqn, dqn_target
-        if len(obs_dim == 1):
+        if len(obs_dim) == 1:
             # if input is 1d array use convolutional layers
             self.dqn = DenseNet(
                 obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
