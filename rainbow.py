@@ -10,6 +10,7 @@ from replay_buffer import *
 from utils import *
 from IPython.display import clear_output
 from torch.nn.utils import clip_grad_norm_
+from preprocess_frame import *
 
 
 class DQNAgent:
@@ -75,24 +76,29 @@ class DQNAgent:
             # Only if no_noise is True
             max_epsilon: float = 1.,
             min_epsilon: float = 0.1,
-            epsilon_decay: float = 0.0005
+            epsilon_decay: float = 0.0005,
+            # input preprocessing functions
+            frame_preprocess: np.array = None  # this is a function
     ):
-        assert len(env.observation_space.shape) == 3 or len(env.observation_space.shape) == 1
-        if len(env.observation_space.shape) == 1:
+        obs_shape = env.observation_space.shape  # get shape of an observation
+        if frame_preprocess is not None:
+            obs_shape = frame_preprocess(np.zeros(obs_shape)).shape  # get shape of preprocessed observation
+        assert len(obs_shape) == 3 or len(obs_shape) == 1
+        if len(obs_shape) == 1:  # observation is an array
             print("Using DenseNet")
-            obs_dim = [env.observation_space.shape[0]]
+            obs_dim = [obs_shape[0]]
         else:
-            print("Using ConvNet")
-            # TODO convert to grayscale
+            print("Using ConvNet")  # observation is a frame
             # remember: gym has dimension (w, h, c) but pytorch has (c, h, w)
-            obs_dim = [env.observation_space.shape[0], env.observation_space.shape[1], env.observation_space.shape[2]]
-        action_dim = env.action_space.n
+            obs_dim = [obs_shape[0], obs_shape[1], obs_shape[2]]
 
-        self.env = env
+        action_dim = env.action_space.n  # get number of possible actions
+
+        self.env = env  # the the gym environment
         self.batch_size = batch_size
         self.target_update = target_update
         self.gamma = gamma
-        self.hidden_size = hidden_size
+        self.hidden_size = hidden_size  # this parameters is used only with DenseNet
 
         # device: cpu / gpu
         self.device = torch.device(
@@ -100,7 +106,7 @@ class DQNAgent:
         )
         print("Device", self.device)
 
-        # PER and memory for N-step Learning
+        # PER and memory for N-step Learning (PER = Prioritized Experience Replay)
         self.beta = beta
         self.prior_eps = prior_eps
         self.memory = PrioritizedReplayBuffer(
@@ -118,7 +124,7 @@ class DQNAgent:
 
         # networks: dqn, dqn_target
         if len(obs_dim) == 1:
-            # if input is 1d array use convolutional layers
+            # if input is 1d array use dense layers
             self.dqn = DenseNet(
                 obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
             ).to(self.device)
@@ -133,7 +139,7 @@ class DQNAgent:
             self.dqn_target = ConvNet(
                 obs_dim, action_dim, self.atom_size, self.support, no_dueling, no_noise
             ).to(self.device)
-        self.dqn_target.load_state_dict(self.dqn.state_dict())
+        self.dqn_target.load_state_dict(self.dqn.state_dict())  # DQN <- targetDQN
         self.dqn_target.eval()
 
         # optimizer
@@ -145,32 +151,35 @@ class DQNAgent:
         # mode: train / test
         self.is_test = False
 
+        # observation preprocess function
+        self.frame_preprocess = frame_preprocess
+
         # plot
         self.plot = plot
         self.plotting_interval = plotting_interval
 
-        # epsilon
+        # epsilon (used only if noisy net is disabled)
         self.max_epsilon = max_epsilon
         self.min_epsilon = min_epsilon
         self.epsilon = self.max_epsilon
         self.epsilon_decay = epsilon_decay
 
         # options to disable some features
-        self.no_dueling = no_dueling
-        self.no_double = no_double
+        self.no_dueling = no_dueling  # no dueling
+        self.no_double = no_double  # no double
         if no_double:
             self.dqn_target = self.dqn
-        self.no_noise = no_noise
+        self.no_noise = no_noise  # no noise
         if no_noise:
             self.epsilon, self.max_epsilon, self.min_epsilon = 0, 0, 0
-        self.no_categorical = no_categorical
-        self.no_n_step = no_n_step
+        self.no_categorical = no_categorical  # no categorical
+        self.no_n_step = no_n_step  # no n_step
         if no_n_step:
             self.n_step = 1
             self.memory = PrioritizedReplayBuffer(
                 obs_dim, memory_size, batch_size, alpha=alpha, n_step=self.n_step, gamma=gamma
             )
-        self.no_priority = no_priority
+        self.no_priority = no_priority  # no priority memory
         if no_priority:
             self.alpha = 0
             self.memory = PrioritizedReplayBuffer(
@@ -181,6 +190,7 @@ class DQNAgent:
         """Select an action from the input state and return state and action."""
         # epsilon greedy policy
         if self.no_noise and self.epsilon > np.random.random():
+            # Select a random action
             selected_action = self.env.action_space.sample()
         else:
             # Select best action: no epsilon greedy action selection but NoisyNet
@@ -197,10 +207,12 @@ class DQNAgent:
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, np.float64, bool]:
         """Take an action and return the response of the env (next state, rewards, done)."""
         next_state, reward, done, _ = self.env.step(action)
+        if self.frame_preprocess is not None:
+            next_state = self.frame_preprocess(next_state)
 
         if not self.is_test:
             self.transition += [reward, next_state, done]
-            self.memory.store(*self.transition)
+            self.memory.store(*self.transition)  # store a full transition
 
         return next_state, reward, done
 
@@ -241,11 +253,15 @@ class DQNAgent:
         self.is_test = False
 
         state = self.env.reset()
-        update_cnt = 0
-        losses = []
-        scores = []
-        frame_scores = []
-        score = 0
+        # get the first state
+        if self.frame_preprocess is not None:
+            state = self.frame_preprocess(state)
+
+        update_cnt = 0  # counts the number of steps between each update
+        losses = []  # loss for each training step
+        scores = []  # score for each episode
+        frame_scores = []  # average score each plotting_interval frames
+        score = 0  # current score
 
         for frame_idx in range(1, num_frames + 1):
             action = self.select_action(state)
@@ -262,6 +278,8 @@ class DQNAgent:
             if done:
                 scores.append(score)
                 state = self.env.reset()
+                if self.frame_preprocess is not None:
+                    state = self.frame_preprocess(state)
                 score = 0
 
             # linearly decrease epsilon
@@ -285,8 +303,11 @@ class DQNAgent:
             if self.plot and frame_idx % self.plotting_interval == 0:
                 if len(scores) == 0:
                     if len(frame_scores) > 0:
+                        # if no episodes have been completed in the current interval
+                        # then take the last score
                         frame_scores.append(float(frame_scores[-1]))
                     else:
+                        # if no episodes have been completed since the beginning of the game
                         frame_scores.append(0.)
                 else:
                     frame_scores.append(float(np.mean(scores)))
@@ -297,17 +318,23 @@ class DQNAgent:
 
         return frame_scores, losses
 
-    def test(self) -> int:
+    def test(self) -> (int, List[int]):
         """Test the agent on one episode."""
         self.is_test = True
 
         state = self.env.reset()
+        if self.frame_preprocess is not None:
+            state = self.frame_preprocess(state)
+
         done = False
         score = 0
+
+        actions = []
 
         while not done:
             self.env.render()
             action = self.select_action(state)
+            actions.append(action)
             next_state, reward, done = self.step(action)
 
             state = next_state
@@ -316,7 +343,7 @@ class DQNAgent:
         print("score: ", score)
         self.env.close()
 
-        return score
+        return score, actions
 
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray], gamma: float) -> torch.Tensor:
         """Return the loss."""
@@ -366,8 +393,8 @@ class DQNAgent:
             #       = r                       otherwise
             action = torch.LongTensor(samples["acts"].reshape(-1, 1)).to(device)
             curr_q_value = self.dqn(state).gather(1, action)
-            next_q_value = self.dqn_target(next_state).max(
-                dim=1, keepdim=True
+            next_q_value = self.dqn_target(next_state).gather(
+                1, self.dqn(next_state).argmax(dim=1, keepdim=True)
             )[0].detach()
             mask = 1 - done
             target = (reward + self.gamma * next_q_value * mask).to(self.device)
