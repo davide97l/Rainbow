@@ -13,6 +13,7 @@ from torch.nn.utils import clip_grad_norm_
 from preprocess_frame import *
 import copy
 from frame_stack import *
+import os
 
 
 class DQNAgent:
@@ -81,10 +82,16 @@ class DQNAgent:
             epsilon_decay: float = 0.0005,
             # Input preprocessing functions
             frame_preprocess: np.array = None,  # this is a function
-            # Early stoppoing
+            # Early stopping
             early_stopping: bool = True,
             # Frames_stacking
-            n_frames_stack: int = 1
+            n_frames_stack: int = 1,
+            # training delay
+            training_delay: int = 0,  # how many frames to skip before start training (used to fill the memory buffer)
+            # used for saving and loading
+            model_path: str = "models",
+            model_name: str = "rainbow"
+
     ):
         obs_shape = env.observation_space.shape  # get shape of an observation
         if frame_preprocess is not None:
@@ -166,8 +173,14 @@ class DQNAgent:
         # current transition to store in memory
         self.transition = list()
 
+        # training delay
+        self.training_delay = training_delay
+
         # mode: train / test
         self.is_test = False
+
+        # save / load
+        self.model_path = os.path.join(model_path, model_name + ".tar")
 
         # observation preprocess function (convert to grayscale, crop, resize...)
         self.frame_preprocess = frame_preprocess
@@ -320,7 +333,7 @@ class DQNAgent:
                 )
 
             # if training is ready
-            if len(self.memory) >= self.batch_size:
+            if len(self.memory) >= self.batch_size and self.training_delay <= 0:
                 loss = self.update_model()
                 losses.append(loss)
                 update_cnt += 1
@@ -346,6 +359,9 @@ class DQNAgent:
                 if self.early_stopping and frame_scores[-1] > best_average_score:
                     best_average_score = frame_scores[-1]
                     best_model = copy.deepcopy(self.dqn.state_dict())
+
+            if self.training_delay > 0:
+                self.training_delay -= 1
 
         if self.early_stopping:
             self.dqn.load_state_dict(best_model)
@@ -382,7 +398,6 @@ class DQNAgent:
             state = next_state
             score += reward
 
-        print("score: ", score)
         self.env.close()
 
         return score, actions
@@ -458,6 +473,21 @@ class DQNAgent:
         else:
             self.frame_stack.stack(frame, self.n_frames_stack)
             return self.frame_stack.frames
+
+    def save(self):
+        if not os.path.exists(self.model_path):
+            os.makedirs(self.model_path)
+        print("Saving model...")
+        torch.save({
+            'model': self.dqn.state_dict(),
+        }, os.path.join(self.model_path))
+        print("Model saved in: " + str(self.model_path))
+
+    def load(self):
+        print("Restoring saved model...")
+        checkpoint = torch.load(self.model_path)
+        self.dqn.load_state_dict(checkpoint['model'])
+        print("Model restored from: " + str(self.model_path))
 
     def _plot(
             self,

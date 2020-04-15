@@ -45,35 +45,35 @@ if __name__ == '__main__':
     agent_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                          no_dueling=True, no_categorical=True, no_double=True,
                          no_n_step=True, no_noise=True, no_priority=True,
-                         plot=plot, plotting_interval=plotting_interval)
+                         plot=plot, frame_interval=plotting_interval)
     agent_double_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                                 no_dueling=True, no_categorical=True, no_double=False,
                                 no_n_step=True, no_noise=True, no_priority=True, plot=plot,
-                                plotting_interval=plotting_interval)
+                                frame_interval=plotting_interval)
     agent_prioritized_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                                      no_dueling=True, no_categorical=True, no_double=False,
                                      no_n_step=True, no_noise=True, no_priority=False,
-                                     plot=plot, plotting_interval=plotting_interval)
+                                     plot=plot, frame_interval=plotting_interval)
     agent_dueling_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                                  no_dueling=False, no_categorical=True, no_double=False,
                                  no_n_step=True, no_noise=True, no_priority=True,
-                                 plot=plot, plotting_interval=plotting_interval)
+                                 plot=plot, frame_interval=plotting_interval)
     agent_noisy_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                                no_dueling=True, no_categorical=True, no_double=False,
                                no_n_step=True, no_noise=False, no_priority=True,
-                               plot=plot, plotting_interval=plotting_interval)
+                               plot=plot, frame_interval=plotting_interval)
     agent_categorical_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                                      no_dueling=True, no_categorical=False, no_double=False,
                                      no_n_step=True, no_noise=True, no_priority=True,
-                                     plot=plot, plotting_interval=plotting_interval)
+                                     plot=plot, frame_interval=plotting_interval)
     agent_n_step_dqn = DQNAgent(env, memory_size, batch_size, target_update,
                                 no_dueling=True, no_categorical=True, no_double=False,
                                 no_n_step=False, no_noise=True, no_priority=True,
-                                plot=plot, plotting_interval=plotting_interval)
+                                plot=plot, frame_interval=plotting_interval)
     agent_rainbow = DQNAgent(env, memory_size, batch_size, target_update,
                              no_dueling=False, no_categorical=False, no_double=False,
                              no_n_step=False, no_noise=False, no_priority=False,
-                             plot=plot, plotting_interval=plotting_interval)
+                             plot=plot, frame_interval=plotting_interval)
     agents = [agent_dqn, agent_double_dqn, agent_prioritized_dqn, agent_dueling_dqn,
               agent_noisy_dqn, agent_categorical_dqn, agent_n_step_dqn, agent_rainbow]
 
