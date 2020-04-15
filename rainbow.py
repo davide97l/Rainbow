@@ -377,7 +377,6 @@ class DQNAgent:
             if self.frame_preprocess is not None:
                 next_state = self.frame_preprocess(next_state)
             if self.n_frames_stack > 1:
-                self.frame_stack.clear()
                 next_state = self.get_n_frames(next_state)
 
             state = next_state
