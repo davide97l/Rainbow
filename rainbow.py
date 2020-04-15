@@ -12,6 +12,7 @@ from IPython.display import clear_output
 from torch.nn.utils import clip_grad_norm_
 from preprocess_frame import *
 import copy
+from frame_stack import *
 
 
 class DQNAgent:
@@ -78,24 +79,35 @@ class DQNAgent:
             max_epsilon: float = 1.,
             min_epsilon: float = 0.1,
             epsilon_decay: float = 0.0005,
-            # input preprocessing functions
+            # Input preprocessing functions
             frame_preprocess: np.array = None,  # this is a function
-            # early stoppoing
-            early_stopping: bool = True
+            # Early stoppoing
+            early_stopping: bool = True,
+            # Frames_stacking
+            n_frames_stack: int = 1
     ):
         obs_shape = env.observation_space.shape  # get shape of an observation
         if frame_preprocess is not None:
             obs_shape = frame_preprocess(np.zeros(obs_shape)).shape  # get shape of preprocessed observation
+        if n_frames_stack > 1:  # if the input consists of more than 1 frame, compute its total dimension
+            obs_shape = list(obs_shape)
+            obs_shape[0] *= n_frames_stack
         assert len(obs_shape) == 3 or len(obs_shape) == 1
         if len(obs_shape) == 1:  # observation is an array
             print("Using DenseNet")
             obs_dim = [obs_shape[0]]
+            self.mode = "dense"
+            self.frame_stack = FrameStack(n_frames_stack, mode="array")
         else:
             print("Using ConvNet")  # observation is a frame
             # remember: gym has dimension (w, h, c) but pytorch has (c, h, w)
             obs_dim = [obs_shape[0], obs_shape[1], obs_shape[2]]
+            self.mode = "conv"
+            self.frame_stack = FrameStack(n_frames_stack, mode="pixels")
 
         action_dim = env.action_space.n  # get number of possible actions
+
+        self.n_frames_stack = n_frames_stack  # number of stacked input observations
 
         self.env = env  # the the gym environment
         self.batch_size = batch_size
@@ -126,7 +138,7 @@ class DQNAgent:
         ).to(self.device)
 
         # networks: dqn, dqn_target
-        if len(obs_dim) == 1:
+        if self.mode == "dense":
             # if input is 1d array use dense layers
             self.dqn = DenseNet(
                 obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
@@ -215,6 +227,8 @@ class DQNAgent:
         next_state, reward, done, _ = self.env.step(action)
         if self.frame_preprocess is not None:
             next_state = self.frame_preprocess(next_state)
+        if self.n_frames_stack > 1:
+            next_state = self.get_n_frames(next_state)
 
         if not self.is_test:
             self.transition += [reward, next_state, done]
@@ -262,6 +276,9 @@ class DQNAgent:
         # get the first state
         if self.frame_preprocess is not None:
             state = self.frame_preprocess(state)
+        if self.n_frames_stack > 1:
+            self.frame_stack.clear()
+            state = self.get_n_frames(state)
 
         update_cnt = 0  # counts the number of steps between each update
         losses = []  # loss for each training step
@@ -289,6 +306,9 @@ class DQNAgent:
                 state = self.env.reset()
                 if self.frame_preprocess is not None:
                     state = self.frame_preprocess(state)
+                if self.n_frames_stack > 1:
+                    self.frame_stack.clear()
+                    state = self.get_n_frames(state)
                 score = 0
 
             # linearly decrease epsilon
@@ -328,7 +348,7 @@ class DQNAgent:
                     best_model = copy.deepcopy(self.dqn.state_dict())
 
         if self.early_stopping:
-            self.dqn = copy.deepcopy(best_model.state_dict())
+            self.dqn.load_state_dict(best_model)
         self.env.close()
 
         return frame_scores, losses
@@ -340,6 +360,9 @@ class DQNAgent:
         state = self.env.reset()
         if self.frame_preprocess is not None:
             state = self.frame_preprocess(state)
+        if self.n_frames_stack > 1:
+            self.frame_stack.clear()
+            state = self.get_n_frames(state)
 
         done = False
         score = 0
@@ -351,6 +374,11 @@ class DQNAgent:
             action = self.select_action(state)
             actions.append(action)
             next_state, reward, done = self.step(action)
+            if self.frame_preprocess is not None:
+                next_state = self.frame_preprocess(next_state)
+            if self.n_frames_stack > 1:
+                self.frame_stack.clear()
+                next_state = self.get_n_frames(next_state)
 
             state = next_state
             score += reward
@@ -422,6 +450,15 @@ class DQNAgent:
     def _target_hard_update(self):
         """Hard update: target <- local."""
         self.dqn_target.load_state_dict(self.dqn.state_dict())
+
+    def get_n_frames(self, frame):
+        """Return the last n frames"""
+        if self.frame_stack.full():
+            self.frame_stack.stack(frame, 1)
+            return self.frame_stack.frames
+        else:
+            self.frame_stack.stack(frame, self.n_frames_stack)
+            return self.frame_stack.frames
 
     def _plot(
             self,
