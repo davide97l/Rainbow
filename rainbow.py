@@ -11,6 +11,7 @@ from utils import *
 from IPython.display import clear_output
 from torch.nn.utils import clip_grad_norm_
 from preprocess_frame import *
+import copy
 
 
 class DQNAgent:
@@ -35,7 +36,7 @@ class DQNAgent:
         hidden_size (int): size of the layers of the top dense network
         lr (float): learning rate
         plot (bool): if True, plot training charts
-        plotting_interval (int): steps per plotting refresh
+        frame_interval (int): steps per plotting refresh
         alpha (float): determines how much prioritization is used
         beta (float): determines how much importance sampling is used
         prior_eps (float): guarantees every transition can be sampled
@@ -65,7 +66,7 @@ class DQNAgent:
             n_step: int = 3,
             # Plotting
             plot: bool = True,
-            plotting_interval: int = 100,
+            frame_interval: int = 100,
             # Options
             no_dueling: bool = False,
             no_double: bool = False,
@@ -78,7 +79,9 @@ class DQNAgent:
             min_epsilon: float = 0.1,
             epsilon_decay: float = 0.0005,
             # input preprocessing functions
-            frame_preprocess: np.array = None  # this is a function
+            frame_preprocess: np.array = None,  # this is a function
+            # early stoppoing
+            early_stopping: bool = True
     ):
         obs_shape = env.observation_space.shape  # get shape of an observation
         if frame_preprocess is not None:
@@ -142,6 +145,9 @@ class DQNAgent:
         self.dqn_target.load_state_dict(self.dqn.state_dict())  # DQN <- targetDQN
         self.dqn_target.eval()
 
+        # early stropping
+        self.early_stopping = early_stopping
+
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters(), lr=lr)
 
@@ -151,12 +157,12 @@ class DQNAgent:
         # mode: train / test
         self.is_test = False
 
-        # observation preprocess function
+        # observation preprocess function (convert to grayscale, crop, resize...)
         self.frame_preprocess = frame_preprocess
 
         # plot
         self.plot = plot
-        self.plotting_interval = plotting_interval
+        self.frame_interval = frame_interval
 
         # epsilon (used only if noisy net is disabled)
         self.max_epsilon = max_epsilon
@@ -260,8 +266,11 @@ class DQNAgent:
         update_cnt = 0  # counts the number of steps between each update
         losses = []  # loss for each training step
         scores = []  # score for each episode
-        frame_scores = []  # average score each plotting_interval frames
+        frame_scores = []  # average score each frame_interval frames
         score = 0  # current score
+        if self.early_stopping:
+            best_model = copy.deepcopy(self.dqn.state_dict())
+            best_average_score = -np.inf
 
         for frame_idx in range(1, num_frames + 1):
             action = self.select_action(state)
@@ -300,7 +309,7 @@ class DQNAgent:
                     self._target_hard_update()
 
             # plotting
-            if self.plot and frame_idx % self.plotting_interval == 0:
+            if self.plot and frame_idx % self.frame_interval == 0:
                 if len(scores) == 0:
                     if len(frame_scores) > 0:
                         # if no episodes have been completed in the current interval
@@ -313,7 +322,13 @@ class DQNAgent:
                     frame_scores.append(float(np.mean(scores)))
                 self._plot(frame_idx, frame_scores, losses)
                 scores = []
+                # early stopping
+                if self.early_stopping and frame_scores[-1] > best_average_score:
+                    best_average_score = frame_scores[-1]
+                    best_model = copy.deepcopy(self.dqn.state_dict())
 
+        if self.early_stopping:
+            self.dqn = copy.deepcopy(best_model.state_dict())
         self.env.close()
 
         return frame_scores, losses
@@ -421,7 +436,7 @@ class DQNAgent:
         plt.title('Frame %s. Mean Score: %.4s' % (frame_idx,
                                                   np.mean(scores[-3:])))
         plt.plot(scores)
-        plt.xlabel("Frames x " + str(self.plotting_interval))
+        plt.xlabel("Frames x " + str(self.frame_interval))
         plt.ylabel("Score")
         plt.subplot(132)
         plt.title('Loss')
