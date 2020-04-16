@@ -81,14 +81,14 @@ if test:
     agent.load()
     tot_score = 0
     frames = []
-    for i in range(50):
+    for i in range(100):
         score, frames = agent.test(get_frames=True)
         tot_score += score
-        #print("Score: ", score)
+        print("Score: ", score)
         if score > best_score:
             best_score = score
             best_frames = frames
-    print("Average score:", tot_score / 50)
+    print("Average score:", tot_score / 100)
     print("Best score:", best_score)
 
     env.close()
