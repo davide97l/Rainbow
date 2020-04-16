@@ -180,6 +180,7 @@ class DQNAgent:
         self.is_test = False
 
         # save / load
+        self.model_dir = model_path
         self.model_path = os.path.join(model_path, model_name + ".tar")
 
         # observation preprocess function (convert to grayscale, crop, resize...)
@@ -369,7 +370,7 @@ class DQNAgent:
 
         return frame_scores, losses
 
-    def test(self) -> (int, List[int]):
+    def test(self, get_frames=False, get_actions=False) -> (int, List[int]) or (int, List[np.ndarray]):
         """Test the agent on one episode."""
         self.is_test = True
 
@@ -384,11 +385,13 @@ class DQNAgent:
         score = 0
 
         actions = []
+        frames = []
 
         while not done:
             self.env.render()
             action = self.select_action(state)
-            actions.append(action)
+            if get_actions:
+                actions.append(action)
             next_state, reward, done = self.step(action)
             if self.frame_preprocess is not None:
                 next_state = self.frame_preprocess(next_state)
@@ -398,9 +401,19 @@ class DQNAgent:
             state = next_state
             score += reward
 
+            if get_frames:
+                frames.append(self.env.render(mode='rgb_array'))
+
         self.env.close()
 
-        return score, actions
+        if get_frames and not get_actions:
+            return score, frames
+        if not get_frames and get_actions:
+            return score, actions
+        if get_frames and get_actions:
+            return score, frames, actions
+
+        return score
 
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray], gamma: float) -> torch.Tensor:
         """Return the loss."""
@@ -465,7 +478,7 @@ class DQNAgent:
         """Hard update: target <- local."""
         self.dqn_target.load_state_dict(self.dqn.state_dict())
 
-    def get_n_frames(self, frame):
+    def get_n_frames(self, frame: np.ndarray) -> np.ndarray:
         """Return the last n frames"""
         if self.frame_stack.full():
             self.frame_stack.stack(frame, 1)
@@ -475,8 +488,8 @@ class DQNAgent:
             return self.frame_stack.frames
 
     def save(self):
-        if not os.path.exists(self.model_path):
-            os.makedirs(self.model_path)
+        if not os.path.exists(self.model_dir):
+            os.makedirs(self.model_dir)
         print("Saving model...")
         torch.save({
             'model': self.dqn.state_dict(),
@@ -489,12 +502,7 @@ class DQNAgent:
         self.dqn.load_state_dict(checkpoint['model'])
         print("Model restored from: " + str(self.model_path))
 
-    def _plot(
-            self,
-            frame_idx: int,
-            scores: List[float],
-            losses: List[float],
-    ):
+    def _plot(self, frame_idx: int, scores: List[float], losses: List[float]):
         """Plot the training progresses."""
         clear_output(True)
         plt.figure(figsize=(20, 5))
