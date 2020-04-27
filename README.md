@@ -6,7 +6,7 @@ This repository implements the deep reinforcement learning algorithm called **Ra
 - Dueling network [[link]](https://arxiv.org/abs/1511.06581)
 - Prioritized experience replay (PER) [[link]](https://arxiv.org/abs/1511.05952)
 - n-Step learning [[link]](https://arxiv.org/abs/1901.07510)
-- Noisy network [link]](https://arxiv.org/abs/1706.10295)
+- Noisy network [[link]](https://arxiv.org/abs/1706.10295)
 - Categorical distribution [[link]](https://arxiv.org/pdf/1710.10044.pdf)
 - Rainbow [[link]](https://arxiv.org/abs/1710.02298)
 
