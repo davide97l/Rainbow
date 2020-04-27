@@ -393,8 +393,6 @@ class DQNAgent:
             if get_actions:
                 actions.append(action)
             next_state, reward, done = self.step(action)
-            if self.n_frames_stack > 1:
-                next_state = self.get_n_frames(next_state)
 
             state = next_state
             score += reward
