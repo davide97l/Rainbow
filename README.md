@@ -22,7 +22,7 @@ To compare the performance of the 8 different architectures on the CartPole envi
 
 # Rainbow comparison
 
-It is also possible to compare different Rainbow architecures, the following script will evaluate two model on the CarPole Environment. The first one is a vanilla Rainbow while the second one takes as input 4 stacked observation.
+It is also possible to compare different Rainbow architecures, the following script will evaluate two model on the CartPole Environment. The first one is a vanilla Rainbow while the second one takes as input 4 stacked observation.
 ```
 # python rainbow_comparison.py --num_frames 2000 --plotting_interval 100
 ```
