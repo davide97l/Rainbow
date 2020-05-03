@@ -5,7 +5,7 @@ This repository implements the deep reinforcement learning algorithm called **Ra
 - Double DQN (DDQN) [[link]](https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf)
 - Dueling network [[link]](https://arxiv.org/abs/1511.06581)
 - Prioritized experience replay (PER) [[link]](https://arxiv.org/abs/1511.05952)
-- n-Step learning [[link]](https://arxiv.org/abs/1901.07510)
+- N-Step learning [[link]](https://arxiv.org/abs/1901.07510)
 - Noisy network [[link]](https://arxiv.org/abs/1706.10295)
 - Categorical distribution [[link]](https://arxiv.org/pdf/1710.10044.pdf)
 - Rainbow [[link]](https://arxiv.org/abs/1710.02298)
@@ -36,6 +36,16 @@ To train and test a model on a specific environment you can refer to the noteboo
 <p align="center">
 <img src="images/pacman-300000-rainbow.png"height="50%" width="50%" ></a>
 </p>
+
+# Other features
+
+- **Frame preprocessing**: it is possible to define a custom function to preprocess every input frame such as resizing, scaling, normalizing, grey-scale conversion, etc.
+- **Frames temporal stack**: it gives the possibility to compose observations by stacking the last n-frames in order to add the time dimension. It is useful in that kind of environments where object directions play a fondamental role such as Pong and Breakout.
+- **Early stopping**: it allows to save the DQN that during training achieved the highest average reward instead than the model at the end of training as it normally happens.
+- **Reward clipping**: clips the reward between an upper and a lower bound. It helps the agent learning an effective policy rather than focusing on achieving highest scores.
+- **Segment tree**: allows to efficiently store and sample transition from the Prioritized Experience Replay buffer in ln(n) time where n is the number of stored transitions.
+- **Delayed training**: make the training process begine only once a certain number of transitions have been stored in order to increase their variance.
+- **Flexible architecture**: possibility to disable one or more Rainbow extensions in order to explore different architecures.
 
 # References
 - https://github.com/Curt-Park/rainbow-is-all-you-need
