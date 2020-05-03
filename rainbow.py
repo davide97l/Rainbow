@@ -80,6 +80,9 @@ class DQNAgent:
             max_epsilon: float = 1.,
             min_epsilon: float = 0.1,
             epsilon_decay: float = 0.0005,
+            # Reward clipping
+            max_reward: float = None,
+            min_reward: float = None,
             # Input preprocessing functions
             frame_preprocess: np.array = None,  # this is a function
             # Early stopping
@@ -179,6 +182,10 @@ class DQNAgent:
         # mode: train / test
         self.is_test = False
 
+        # reward clipping
+        self.max_reward = max_reward
+        self.min_reward = min_reward
+
         # save / load
         self.model_dir = model_path
         self.model_path = os.path.join(model_path, model_name + ".tar")
@@ -243,6 +250,14 @@ class DQNAgent:
             next_state = self.frame_preprocess(next_state)
         if self.n_frames_stack > 1:
             next_state = self.get_n_frames(next_state)
+
+        if self.max_reward is not None:
+            if reward > self.max_reward:
+                reward = self.max_reward
+
+        if self.min_reward is not None:
+            if reward < self.min_reward:
+                reward = self.min_reward
 
         if not self.is_test:
             self.transition += [reward, next_state, done]
@@ -504,7 +519,7 @@ class DQNAgent:
         plt.figure(figsize=(20, 5))
         plt.subplot(131)
         plt.title('Frame %s. Mean Score: %.4s' % (frame_idx,
-                                                  np.mean(scores[-3:])))
+                                                  np.mean(scores[-10:])))
         plt.plot(scores)
         plt.xlabel("Frames x " + str(self.frame_interval))
         plt.ylabel("Score")
