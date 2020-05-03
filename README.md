@@ -34,7 +34,7 @@ It is also possible to compare different Rainbow architecures, the following scr
 
 To train and test a model on a specific environment you can refer to the notebook `dqn_env_evaluation.ipynb`. It also allows you to configure variuos hyperparameters, save and load existing models.
 <p align="center">
-<img src="images/pacman-1M-rainbow.png"height="50%" width="50%" ></a>
+<img src="images/pacman-1M.png"height="50%" width="50%" ></a>
 </p>
 
 # Other features
