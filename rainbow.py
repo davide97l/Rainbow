@@ -94,7 +94,6 @@ class DQNAgent:
             # used for saving and loading
             model_path: str = "models",
             model_name: str = "rainbow"
-
     ):
         obs_shape = env.observation_space.shape  # get shape of an observation
         if frame_preprocess is not None:
@@ -105,17 +104,17 @@ class DQNAgent:
         assert len(obs_shape) == 3 or len(obs_shape) == 1
         if len(obs_shape) == 1:  # observation is an array
             print("Using DenseNet")
-            obs_dim = [obs_shape[0]]
+            self.obs_dim = [obs_shape[0]]
             self.mode = "dense"
             self.frame_stack = FrameStack(n_frames_stack, mode="array")
         else:
             print("Using ConvNet")  # observation is a frame
             # remember: gym has dimension (w, h, c) but pytorch has (c, h, w)
-            obs_dim = [obs_shape[0], obs_shape[1], obs_shape[2]]
+            self.obs_dim = [obs_shape[0], obs_shape[1], obs_shape[2]]
             self.mode = "conv"
             self.frame_stack = FrameStack(n_frames_stack, mode="pixels")
 
-        action_dim = env.action_space.n  # get number of possible actions
+        self.action_dim = env.action_space.n  # get number of possible actions
 
         self.n_frames_stack = n_frames_stack  # number of stacked input observations
 
@@ -135,7 +134,7 @@ class DQNAgent:
         self.beta = beta
         self.prior_eps = prior_eps
         self.memory = PrioritizedReplayBuffer(
-            obs_dim, memory_size, batch_size, alpha=alpha, n_step=n_step, gamma=gamma
+            self.obs_dim, memory_size, batch_size, alpha=alpha, n_step=n_step, gamma=gamma
         )
         self.n_step = n_step
 
@@ -151,18 +150,18 @@ class DQNAgent:
         if self.mode == "dense":
             # if input is 1d array use dense layers
             self.dqn = DenseNet(
-                obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
+                self.obs_dim[0], self.action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
             ).to(self.device)
             self.dqn_target = DenseNet(
-                obs_dim[0], action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
+                self.obs_dim[0], self.action_dim, self.atom_size, self.support, self.hidden_size, no_dueling, no_noise
             ).to(self.device)
         else:
             # if input is 3d frame use convolutional layers
             self.dqn = ConvNet(
-                obs_dim, action_dim, self.atom_size, self.support, no_dueling, no_noise
+                self.obs_dim, self.action_dim, self.atom_size, self.support, no_dueling, no_noise
             ).to(self.device)
             self.dqn_target = ConvNet(
-                obs_dim, action_dim, self.atom_size, self.support, no_dueling, no_noise
+                self.obs_dim, self.action_dim, self.atom_size, self.support, no_dueling, no_noise
             ).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())  # DQN <- targetDQN
         self.dqn_target.eval()
@@ -171,7 +170,8 @@ class DQNAgent:
         self.early_stopping = early_stopping
 
         # optimizer
-        self.optimizer = optim.Adam(self.dqn.parameters(), lr=lr)
+        self.lr = lr
+        self.optimizer = optim.Adam(self.dqn.parameters(), lr=self.lr)
 
         # current transition to store in memory
         self.transition = list()
@@ -216,13 +216,13 @@ class DQNAgent:
         if no_n_step:
             self.n_step = 1
             self.memory = PrioritizedReplayBuffer(
-                obs_dim, memory_size, batch_size, alpha=alpha, n_step=self.n_step, gamma=gamma
+                self.obs_dim, memory_size, batch_size, alpha=alpha, n_step=self.n_step, gamma=gamma
             )
         self.no_priority = no_priority  # no priority memory
         if no_priority:
             self.alpha = 0
             self.memory = PrioritizedReplayBuffer(
-                obs_dim, memory_size, batch_size, alpha=alpha, n_step=self.n_step, gamma=gamma
+                self.obs_dim, memory_size, batch_size, alpha=alpha, n_step=self.n_step, gamma=gamma
             )
 
     def select_action(self, state: np.ndarray) -> np.ndarray:
@@ -303,11 +303,7 @@ class DQNAgent:
 
         state = self.env.reset()
         # get the first state
-        if self.frame_preprocess is not None:
-            state = self.frame_preprocess(state)
-        if self.n_frames_stack > 1:
-            self.frame_stack.clear()
-            state = self.get_n_frames(state)
+        state = self.init_first_frame(state)
 
         update_cnt = 0  # counts the number of steps between each update
         losses = []  # loss for each training step
@@ -325,28 +321,18 @@ class DQNAgent:
             state = next_state
             score += reward
 
-            # PER: increase beta (make weight sampling more effective)
-            fraction = min(frame_idx / num_frames, 1.0)
-            self.beta = self.beta + fraction * (1.0 - self.beta)
+            self.update_beta()
 
             # if episode ends
             if done:
                 scores.append(score)
                 state = self.env.reset()
-                if self.frame_preprocess is not None:
-                    state = self.frame_preprocess(state)
-                if self.n_frames_stack > 1:
-                    self.frame_stack.clear()
-                    state = self.get_n_frames(state)
+                state = self.init_first_frame(state)
                 score = 0
 
             # linearly decrease epsilon
             if self.no_noise:
-                self.epsilon = max(
-                    self.min_epsilon, self.epsilon - (
-                            self.max_epsilon - self.min_epsilon
-                    ) * self.epsilon_decay
-                )
+                self.set_epsilon()
 
             # if training is ready
             if len(self.memory) >= self.batch_size and self.training_delay <= 0:
@@ -357,8 +343,7 @@ class DQNAgent:
                 if update_cnt % self.target_update == 0 and not self.no_double:
                     self._target_hard_update()
 
-            # plotting
-            if self.plot and frame_idx % self.frame_interval == 0:
+            if frame_idx % self.frame_interval == 0:
                 if len(scores) == 0:
                     if len(frame_scores) > 0:
                         # if no episodes have been completed in the current interval
@@ -369,12 +354,15 @@ class DQNAgent:
                         frame_scores.append(0.)
                 else:
                     frame_scores.append(float(np.mean(scores)))
-                self._plot(frame_idx, frame_scores, losses)
+                if self.plot:
+                    self._plot(frame_idx, frame_scores, losses)
                 scores = []
                 # early stopping
                 if self.early_stopping and frame_scores[-1] > best_average_score:
                     best_average_score = frame_scores[-1]
                     best_model = copy.deepcopy(self.dqn.state_dict())
+                # save temporary model
+                self.save()
 
             if self.training_delay > 0:
                 self.training_delay -= 1
@@ -390,11 +378,7 @@ class DQNAgent:
         self.is_test = True
 
         state = self.env.reset()
-        if self.frame_preprocess is not None:
-            state = self.frame_preprocess(state)
-        if self.n_frames_stack > 1:
-            self.frame_stack.clear()
-            state = self.get_n_frames(state)
+        state = self.init_first_frame(state)
 
         done = False
         score = 0
@@ -488,6 +472,31 @@ class DQNAgent:
     def _target_hard_update(self):
         """Hard update: target <- local."""
         self.dqn_target.load_state_dict(self.dqn.state_dict())
+
+    def init_first_frame(self, state):
+        """Preprocess the first frame and fill the empty frame stack repeating it"""
+        if self.frame_preprocess is not None:
+            state = self.frame_preprocess(state)
+        if self.n_frames_stack > 1:
+            self.frame_stack.clear()
+            state = self.get_n_frames(state)
+        return state
+
+    def set_epsilon(self):
+        """Set the value of epsilon"""
+        self.epsilon = max(
+            self.min_epsilon, self.epsilon - (
+                    self.max_epsilon - self.min_epsilon
+            ) * self.epsilon_decay
+        )
+
+    def update_beta(self):
+        """Update beta parameter for PER"""
+        self.epsilon = max(
+            self.min_epsilon, self.epsilon - (
+                    self.max_epsilon - self.min_epsilon
+            ) * self.epsilon_decay
+        )
 
     def get_n_frames(self, frame: np.ndarray) -> np.ndarray:
         """Return the last n frames"""
