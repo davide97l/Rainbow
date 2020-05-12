@@ -32,7 +32,7 @@ It is also possible to compare different Rainbow architecures, the following scr
 
 # Environment evaluation
 
-To train and test a model on a specific environment you can refer to the notebook `dqn_env_evaluation.ipynb`. It also allows you to configure variuos hyperparameters, save and load existing models. The following image refers to the `MsPacman-v0` environment.
+To train and test a model on a specific environment you can refer to the notebook `dqn_env_evaluation.ipynb`. It also allows you to configure variuos hyperparameters, save and load existing models. The following image refers to the `MsPacman-v0` environment. In the figure below, the left chart depicts the training of an agent Rainbow while the right one is a simple DDQN.
 <p align="center">
 <img src="images/pacman-rainbow-ddqn-1M.png"height="80%" width="100%" ></a>
 </p>
