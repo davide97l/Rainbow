@@ -14,7 +14,7 @@ This repository implements the deep reinforcement learning algorithm called **Ra
 
 To compare the performance of the 8 different architectures on the CartPole environment you can use the following command.
 ```
-# python dqn_comparison.py --num_frames 2000 --plotting_interval 1000
+python dqn_comparison.py --num_frames 2000 --plotting_interval 1000
 ```
 <p align="center">
 <img src="images/Rainbow_CartPole-2000_frames.png"height="50%" width="50%" ></a>
@@ -24,7 +24,7 @@ To compare the performance of the 8 different architectures on the CartPole envi
 
 It is also possible to compare different Rainbow architecures, the following script will evaluate two model on the CartPole Environment. The first one is a vanilla Rainbow while the second one takes as input 4 stacked observation.
 ```
-# python rainbow_comparison.py --num_frames 2000 --plotting_interval 100
+python rainbow_comparison.py --num_frames 2000 --plotting_interval 100
 ```
 <p align="center">
 <img src="images/Rainbow-1-4-frames-2000.png"height="50%" width="50%" ></a>
