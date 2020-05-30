@@ -45,6 +45,7 @@ To train and test a model on a specific environment you can refer to the noteboo
 - **Reward clipping**: clips the reward between an upper and a lower bound. It helps the agent learning an effective policy rather than focusing on achieving highest scores.
 - **Segment tree**: allows to efficiently store and sample transition from the Prioritized Experience Replay buffer in ln(n) time where n is the number of stored transitions.
 - **Delayed training**: make the training process begins only once a certain number of transitions have been stored in order to increase their variance.
+- **Batch normalization**: After each hidden layer, it follows a batch normalization layers to improve network's stability.
 - **Flexible architecture**: possibility to disable one or more Rainbow extensions in order to explore different architecures.
 
 # References
